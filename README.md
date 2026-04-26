@@ -1,6 +1,6 @@
 <div align="center">
   <br />
-    <img src="https://raw.githubusercontent.com/RishitTandon7/Aevum/main/public/vite.svg" alt="Aevum Logo" width="100" height="100" />
+    <img src="public/aevum_logo.png" alt="Aevum Logo" width="200" height="200" style="border-radius: 20px; box-shadow: 0 4px 14px rgba(0,0,0,0.1);" />
   <br />
 
   <h1 align="center">Aevum</h1>
@@ -28,6 +28,18 @@
 - ⚡ **Real-time Search:** All searches are powered by a robust backend API featuring simulated scraping functionality.
 - 🎯 **Advanced Filters:** Interactive date pickers, dynamic guest selection, advanced sorting, and category filtering.
 - 🎨 **Premium UI:** A modern, highly responsive design inspired by the world's leading travel platforms, providing a frictionless user experience.
+
+## 🏗️ Architecture Flow
+
+```mermaid
+graph TD;
+    Client[React Frontend] -->|API Requests| ExpressServer[Express Backend];
+    ExpressServer -->|Simulated Scraping| DataStore[(Mock Data)];
+    ExpressServer -->|Future Release| ScraperAPI[External Scraper API];
+    ScraperAPI -->|HTML Extraction| Cheerio[Cheerio Parser];
+    Cheerio -->|Formatted JSON| ExpressServer;
+    ExpressServer -->|Response| Client;
+```
 
 ---
 
@@ -73,7 +85,7 @@ Open your browser and navigate to: `http://localhost:5173`
 
 ---
 
-## 🏗️ Project Structure
+## 📂 Project Structure
 
 ```text
 Aevum/
