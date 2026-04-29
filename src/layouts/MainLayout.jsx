@@ -36,7 +36,7 @@ const MainLayout = () => {
                                 <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
                             </div>
                             <span className={`text-xl font-bold tracking-tight transition-colors ${scrolled || !isTransparentPage ? 'text-slate-900' : 'text-white'}`}>
-                                Antigravity
+                                Aevum
                             </span>
                         </NavLink>
 
@@ -104,7 +104,7 @@ const MainLayout = () => {
                             <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-500/20">
                                 <Sparkles className="w-5 h-5" />
                             </div>
-                            <span className="text-xl font-bold text-slate-900">Antigravity</span>
+                            <span className="text-xl font-bold text-slate-900">Aevum</span>
                         </div>
                         <p className="text-slate-500 mb-8 leading-relaxed pr-8">
                             Reimagining travel with AI. We combine cutting-edge technology with premium design to curate the perfect journey for you.
@@ -144,7 +144,7 @@ const MainLayout = () => {
                     </div>
                 </div>
                 <div className="container mx-auto px-6 pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center text-sm text-slate-400 gap-4">
-                    <p>© 2026 Antigravity Travels. All rights reserved.</p>
+                    <p>© 2026 Aevum. All rights reserved.</p>
                     <div className="flex gap-6 font-medium">
                         <span className="hover:text-slate-600 cursor-pointer transition-colors">English (IN)</span>
                         <span className="hover:text-slate-600 cursor-pointer transition-colors">INR</span>

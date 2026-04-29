@@ -1,12 +1,12 @@
 ================================================================================
 SPRINT 1 EXECUTION REPORT - Week 7 (02.03.2026 - 06.03.2026)
-PROJECT: Antigravity Travel Booking Platform
+PROJECT: Aevum Travel Booking Platform
 ================================================================================
 
 1. SPRINT 1 OVERVIEW & OBJECTIVES
 --------------------------------------------------------------------------------
 Objective: Implement the core frontend and search integration functionality for 
-the Antigravity travel platform. This includes the Home Page, Hotel Comparison, 
+the Aevum travel platform. This includes the Home Page, Hotel Comparison, 
 and the AI-powered Budget Trip Planner.
 
 Goals Achieved:

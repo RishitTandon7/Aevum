@@ -1,6 +1,6 @@
-# Figma Design Prompt — Antigravity Travel Booking Platform
+# Figma Design Prompt — Aevum Travel Booking Platform
 
-Use this prompt in Figma AI (or give to a designer) to recreate the exact UI of the **Antigravity** travel booking web app.
+Use this prompt in Figma AI (or give to a designer) to recreate the exact UI of the **Aevum** travel booking web app.
 
 ---
 
@@ -68,7 +68,7 @@ Use this prompt in Figma AI (or give to a designer) to recreate the exact UI of 
 - Icon badge: `40px × 40px`, border-radius `12px`
   - Transparent state: `background: rgba(255,255,255,0.1)`, white `Sparkles ✦` icon, `border: 1px solid rgba(255,255,255,0.2)`
   - Opaque state: `background: #4f46e5`, white `Sparkles ✦` icon
-- Brand name: `"Antigravity"`, `20px`, `font-weight: 700`
+- Brand name: `"Aevum"`, `20px`, `font-weight: 700`
   - Transparent: `color: white`
   - Opaque: `color: #0f172a`
 
@@ -91,14 +91,14 @@ Use this prompt in Figma AI (or give to a designer) to recreate the exact UI of 
 - Padding: `80px top, 40px bottom`
 - **5-column grid** (2 + 1 + 1 + 1):
   - **Col 1–2 (Brand):**
-    - Logo repeat (indigo badge + "Antigravity" text)
+    - Logo repeat (indigo badge + "Aevum" text)
     - Body text: `"Reimagining travel with AI..."`, slate-500, `line-height: 1.65`
     - 3 social icon circles: `40px`, `background: #f8fafc`, gray icon letter, hover `background: #6366f1`, `color: white`
   - **Col 3 (Company):** heading `"Company"`, links: About Us, Careers, Press
   - **Col 4 (Support):** heading `"Support"`, links: Help Center, Safety, Cancellation
   - **Col 5 (Legal):** heading `"Legal"`, links: Terms, Privacy, Sitemap
 - **Bottom bar** (separated by border-top):
-  - Left: `"© 2026 Antigravity Travels. All rights reserved."`, slate-400
+  - Left: `"© 2026 Aevum. All rights reserved."`, slate-400
   - Right: `"English (IN)"` and `"INR"` text, slate-400 with hover effect
 
 ---
