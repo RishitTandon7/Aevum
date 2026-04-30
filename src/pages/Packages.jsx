@@ -13,8 +13,9 @@ const Packages = () => {
     const searchPackages = async (selectedTheme) => {
         setLoading(true);
         try {
+            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
             const response = await fetch(
-                `http://localhost:3001/api/search/packages?destination=${encodeURIComponent(selectedTheme)}`
+                `${API_BASE}/api/search/packages?destination=${encodeURIComponent(selectedTheme)}`
                 // Note: API uses 'destination' but logic handles theme as destination for now or general search
             );
             const data = await response.json();

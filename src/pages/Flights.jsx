@@ -29,7 +29,8 @@ const Flights = () => {
 
         try {
             const queryParams = new URLSearchParams({ from, to, date, passengers });
-            const response = await fetch(`http://localhost:3001/api/search/flights?${queryParams}`);
+            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            const response = await fetch(`${API_BASE}/api/search/flights?${queryParams}`);
             const data = await response.json();
 
             if (data.success) {

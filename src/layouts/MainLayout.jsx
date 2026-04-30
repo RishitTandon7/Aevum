@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Globe, Menu, UserCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import InstallAppButton from '../components/InstallAppButton';
 
 const MainLayout = () => {
     const [scrolled, setScrolled] = useState(false);
@@ -68,6 +69,7 @@ const MainLayout = () => {
 
                         {/* Actions */}
                         <div className="flex items-center gap-3">
+                            {!isHome && <InstallAppButton compact />}
                             <button className={`hidden md:flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full transition-all ${scrolled || !isTransparentPage
                                 ? 'text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200'
                                 : 'text-white/90 hover:bg-white/10 border border-transparent hover:border-white/20'

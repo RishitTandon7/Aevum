@@ -59,7 +59,8 @@ const BudgetSearch = () => {
                 checkOut
             });
 
-            const response = await fetch(`http://localhost:3001/api/search/budget?${queryParams}`);
+            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            const response = await fetch(`${API_BASE}/api/search/budget?${queryParams}`);
             const data = await response.json();
 
             clearInterval(interval);
@@ -100,6 +101,14 @@ const BudgetSearch = () => {
             setError(err.message);
         }
     };
+
+    const optionsAnalyzed = results ? (results.flights.length + results.hotels.length) : 0;
+    const cheapestPossibleTotal = results?.flights?.length && results?.hotels?.length
+        ? Math.min(...results.flights.flatMap((flight) =>
+            results.hotels.map((hotel) => (flight.price * Number(passengers || 1)) + hotel.price)
+        ))
+        : null;
+    const suggestedBudget = cheapestPossibleTotal ? Math.ceil(cheapestPossibleTotal / 500) * 500 : null;
 
     return (
         <div className="min-h-screen pt-24 pb-20 bg-slate-950 relative overflow-hidden">
@@ -312,19 +321,73 @@ const BudgetSearch = () => {
                         <div className="flex flex-wrap items-center justify-between gap-4">
                             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                                 <Sparkles className="w-6 h-6 text-yellow-500" />
-                                Top {results.combinations.length} Deals Found
+                                {results.combinations.length > 0
+                                    ? `Top ${results.combinations.length} Deals Found`
+                                    : 'No Matching Deals Found'}
                             </h2>
                             <div className="flex gap-3">
                                 <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-sm font-medium">
                                     {results.withinBudget} within budget
                                 </div>
                                 <div className="px-4 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 text-sm font-medium">
-                                    {results.flights.length + results.hotels.length} options analyzed
+                                    {optionsAnalyzed} options analyzed
                                 </div>
                             </div>
                         </div>
 
+                        {results.combinations.length === 0 && (
+                            <div className="relative overflow-hidden border border-white/10 bg-slate-900/80 rounded-2xl p-6 md:p-8">
+                                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-300/40 to-transparent"></div>
+                                <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-center">
+                                    <div>
+                                        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-5">
+                                            <Filter className="w-7 h-7 text-amber-300" />
+                                        </div>
+                                        <h3 className="text-2xl font-bold text-white mb-3">No trip fits this budget yet</h3>
+                                        <p className="text-slate-400 leading-relaxed max-w-2xl">
+                                            We checked {optionsAnalyzed} live options, but every flight and hotel pair is above your current budget. A small adjustment should unlock real combinations.
+                                        </p>
+                                        <div className="flex flex-wrap gap-3 mt-6">
+                                            {suggestedBudget && (
+                                                <button
+                                                    onClick={() => setBudget(String(suggestedBudget))}
+                                                    className="bg-white text-slate-950 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-50 transition-colors"
+                                                >
+                                                    Set budget to ₹{suggestedBudget.toLocaleString()}
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => setPassengers(Math.max(1, Number(passengers || 1) - 1))}
+                                                className="bg-white/10 border border-white/10 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-white/15 transition-colors"
+                                            >
+                                                Reduce travelers
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+                                        <div className="bg-slate-950/60 border border-white/10 rounded-xl p-4">
+                                            <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Current Budget</p>
+                                            <p className="text-2xl font-bold text-white">₹{Number(budget || 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-slate-950/60 border border-white/10 rounded-xl p-4">
+                                            <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Closest Match</p>
+                                            <p className="text-2xl font-bold text-amber-200">
+                                                {cheapestPossibleTotal ? `₹${cheapestPossibleTotal.toLocaleString()}` : 'Unavailable'}
+                                            </p>
+                                        </div>
+                                        <div className="bg-slate-950/60 border border-white/10 rounded-xl p-4">
+                                            <p className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Gap</p>
+                                            <p className="text-2xl font-bold text-pink-200">
+                                                {cheapestPossibleTotal ? `₹${Math.max(cheapestPossibleTotal - Number(budget || 0), 0).toLocaleString()}` : 'N/A'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Combinations Grid */}
+                        {results.combinations.length > 0 && (
                         <div className="grid grid-cols-1 gap-6">
                             {results.combinations.map((combo, index) => (
                                 <div key={index} className="glass-panel p-0 rounded-2xl border border-white/10 overflow-hidden hover:border-indigo-500/30 transition-all group">
@@ -430,6 +493,7 @@ const BudgetSearch = () => {
                                 </div>
                             ))}
                         </div>
+                        )}
                     </div>
                 )}
             </div>

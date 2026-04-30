@@ -21,7 +21,8 @@ const Hotels = () => {
 
         try {
             const queryParams = new URLSearchParams({ destination, checkIn, checkOut, guests });
-            const response = await fetch(`http://localhost:3001/api/search/hotels?${queryParams}`);
+            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+            const response = await fetch(`${API_BASE}/api/search/hotels?${queryParams}`);
             const data = await response.json();
 
             if (data.success) {
