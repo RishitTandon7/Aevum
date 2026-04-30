@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Globe, Menu, UserCircle, Sparkles } from 'lucide-react';
+import { useAuth } from '../AuthContext';
 
 const MainLayout = () => {
     const [scrolled, setScrolled] = useState(false);
+    const { user, logout } = useAuth();
     const location = useLocation();
     const isHome = location.pathname === '/';
     const isBudget = location.pathname === '/budget';
@@ -72,17 +74,34 @@ const MainLayout = () => {
                                 }`}>
                                 <span>INR</span>
                             </button>
-                            <button className={`
+                            {user ? (
+                                <button
+                                    onClick={logout}
+                                    className={`
                                 flex items-center gap-2 pl-2 pr-4 py-2 rounded-full font-bold text-sm transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0
                                 ${scrolled || !isTransparentPage
-                                    ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-slate-900/10 hover:shadow-indigo-500/20'
-                                    : 'bg-white text-indigo-600 hover:bg-indigo-50'}
+                                            ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-slate-900/10 hover:shadow-indigo-500/20'
+                                            : 'bg-white text-indigo-600 hover:bg-indigo-50'}
+                            `}
+                                >
+                                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                                        <UserCircle className="w-4 h-4" />
+                                    </div>
+                                    <span>{user.name.split(' ')[0]}</span>
+                                </button>
+                            ) : (
+                                <NavLink to="/login" className={`
+                                flex items-center gap-2 pl-2 pr-4 py-2 rounded-full font-bold text-sm transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0
+                                ${scrolled || !isTransparentPage
+                                            ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-slate-900/10 hover:shadow-indigo-500/20'
+                                            : 'bg-white text-indigo-600 hover:bg-indigo-50'}
                             `}>
-                                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-                                    <UserCircle className="w-4 h-4" />
-                                </div>
-                                <span>Sign In</span>
-                            </button>
+                                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                                        <UserCircle className="w-4 h-4" />
+                                    </div>
+                                    <span>Sign In</span>
+                                </NavLink>
+                            )}
                         </div>
                     </div>
                 </div>

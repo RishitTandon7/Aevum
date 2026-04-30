@@ -4,6 +4,11 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as cheerio from 'cheerio';
 import UserAgent from 'user-agents';
+import axios from 'axios';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+import 'dotenv/config';
 
 // Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
@@ -16,6 +21,92 @@ app.use(express.json());
 
 // Browser instance management
 let browser = null;
+const DATA_DIR = path.join(process.cwd(), 'data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-me';
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+
+const AIRPORT_CODES = {
+    ahmedabad: 'AMD',
+    bengaluru: 'BLR',
+    bangalore: 'BLR',
+    chennai: 'MAA',
+    delhi: 'DEL',
+    goa: 'GOI',
+    hyderabad: 'HYD',
+    jaipur: 'JAI',
+    kolkata: 'CCU',
+    lucknow: 'LKO',
+    mumbai: 'BOM',
+    pune: 'PNQ'
+};
+
+async function readUsers() {
+    try {
+        const raw = await fs.readFile(USERS_FILE, 'utf8');
+        return JSON.parse(raw);
+    } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        return [];
+    }
+}
+
+async function writeUsers(users) {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+    const hash = crypto.pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+    const [salt, expected] = stored.split(':');
+    const actual = hashPassword(password, salt).split(':')[1];
+    return crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
+}
+
+function signToken(user) {
+    const payload = Buffer.from(JSON.stringify({
+        sub: user.id,
+        email: user.email,
+        name: user.name,
+        exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+    })).toString('base64url');
+    const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+}
+
+function verifyToken(token) {
+    if (!token || !token.includes('.')) return null;
+    const [payload, signature] = token.split('.');
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return data.exp > Date.now() ? data : null;
+}
+
+function requireAuth(req, res, next) {
+    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    const session = verifyToken(token);
+    if (!session) return res.status(401).json({ error: 'Please sign in to continue' });
+    req.user = session;
+    next();
+}
+
+function airportCode(cityOrCode) {
+    const value = String(cityOrCode || '').trim();
+    if (/^[A-Z]{3}$/.test(value)) return value;
+    return AIRPORT_CODES[value.toLowerCase()] || null;
+}
+
+function parseMoney(value) {
+    if (typeof value === 'number') return value;
+    const match = String(value || '').match(/[\d,]+/);
+    return match ? parseInt(match[0].replace(/,/g, ''), 10) : null;
+}
 
 async function getBrowser() {
     if (!browser) {
@@ -38,6 +129,71 @@ async function getBrowser() {
 // ============================================
 // REAL FLIGHT SCRAPING - Google Flights
 // ============================================
+async function searchSerpApiFlights(from, to, date) {
+    if (!process.env.SERPAPI_KEY) {
+        console.log('    -> SERPAPI_KEY missing, skipping Google Flights API provider');
+        return null;
+    }
+
+    const departureId = airportCode(from);
+    const arrivalId = airportCode(to);
+    if (!departureId || !arrivalId) {
+        console.log(`    -> Airport code missing for ${from} or ${to}, skipping SerpApi`);
+        return null;
+    }
+
+    try {
+        console.log(`    -> Requesting live Google Flights data via SerpApi (${departureId} -> ${arrivalId})`);
+        const response = await axios.get('https://serpapi.com/search.json', {
+            timeout: 30000,
+            params: {
+                engine: 'google_flights',
+                type: 2,
+                departure_id: departureId,
+                arrival_id: arrivalId,
+                outbound_date: date,
+                currency: 'INR',
+                hl: 'en',
+                api_key: process.env.SERPAPI_KEY
+            }
+        });
+
+        const rows = [
+            ...(response.data?.best_flights || []),
+            ...(response.data?.other_flights || [])
+        ].slice(0, 20);
+
+        const flights = rows.map((row, index) => {
+            const firstLeg = row.flights?.[0] || {};
+            const lastLeg = row.flights?.[row.flights.length - 1] || firstLeg;
+            const price = parseMoney(row.price);
+            if (!price) return null;
+
+            return {
+                id: index + 1,
+                airline: firstLeg.airline || 'Unknown airline',
+                flightNumber: firstLeg.flight_number || `GF-${1000 + index}`,
+                from,
+                to,
+                departure: firstLeg.departure_airport?.time || '',
+                arrival: lastLeg.arrival_airport?.time || '',
+                duration: row.total_duration ? `${Math.floor(row.total_duration / 60)}h ${row.total_duration % 60}m` : '',
+                price,
+                stops: Math.max((row.flights?.length || 1) - 1, 0),
+                isDirect: (row.flights?.length || 1) === 1,
+                source: 'Google Flights via SerpApi',
+                bookingLink: response.data?.search_metadata?.google_flights_url || 'https://www.google.com/travel/flights',
+                logo: firstLeg.airline_logo || ''
+            };
+        }).filter(Boolean);
+
+        return flights.length ? flights.sort((a, b) => a.price - b.price) : null;
+    } catch (error) {
+        console.error('    SerpApi flight search failed:', error.response?.data?.error || error.message);
+        return null;
+    }
+}
+
 async function scrapeGoogleFlights(from, to, date) {
     console.log(`  🌐 Scraping Google Flights: ${from} → ${to}`);
 
@@ -84,8 +240,9 @@ async function scrapeGoogleFlights(from, to, date) {
                     const departure = timeElements[0]?.textContent?.trim() || '';
                     const arrival = timeElements[1]?.textContent?.trim() || '';
 
-                    // Extract price
-                    const priceEl = card.querySelector('[class*="YMlIz"], [class*="price"], [data-gs*="price"]');
+                    // Extract price from visible currency text. Avoid guessing when Google changes classes.
+                    const priceEl = Array.from(card.querySelectorAll('span, div'))
+                        .find((el) => /₹|INR|Rs\.?/i.test(el.textContent || ''));
                     const priceText = priceEl?.textContent?.trim() || '';
                     const priceMatch = priceText.match(/[\d,]+/);
                     const price = priceMatch ? parseInt(priceMatch[0].replace(/,/g, '')) : null;
@@ -137,12 +294,13 @@ async function scrapeGoogleFlights(from, to, date) {
                 price: flight.price,
                 stops: flight.stops,
                 isDirect: flight.isDirect,
-                source: 'Google Flights (Scraped)',
+                source: 'Google Flights (Browser scrape)',
+                bookingLink: url,
                 logo: `https://images.kiwi.com/airlines/64/${flight.airline.substring(0, 2).toUpperCase()}.png`
             }));
         }
 
-        console.log(`    ⚠️ No flights found, using fallback`);
+        console.log(`    No live flight prices found in Google Flights DOM`);
         return null;
 
     } catch (error) {
@@ -259,57 +417,8 @@ async function scrapeBookingCom(destination, checkIn, checkOut) {
 }
 
 // ============================================
-// SMART FALLBACK (Only when scraping fails)
+// HOTEL FALLBACK (Only when hotel scraping fails)
 // ============================================
-function generateSmartFlights(from, to, date) {
-    console.log(`  ⚠️ Using smart fallback for flights`);
-
-    const airlines = [
-        { name: 'IndiGo', code: '6E', multiplier: 1.0 },
-        { name: 'Air India', code: 'AI', multiplier: 1.15 },
-        { name: 'Vistara', code: 'UK', multiplier: 1.25 },
-        { name: 'SpiceJet', code: 'SG', multiplier: 0.9 }
-    ];
-
-    const routePrices = {
-        'Mumbai-Delhi': 4500, 'Delhi-Mumbai': 4500,
-        'Mumbai-Goa': 3800, 'Goa-Mumbai': 3800,
-        'Delhi-Goa': 5500, 'Goa-Delhi': 5500,
-        'Mumbai-Bangalore': 4200, 'Bangalore-Mumbai': 4200,
-        'default': 5000
-    };
-
-    const basePrice = routePrices[`${from}-${to}`] || routePrices['default'];
-    const flights = [];
-
-    for (let i = 0; i < 12; i++) {
-        const airline = airlines[i % airlines.length];
-        const isDirect = Math.random() > 0.3;
-        const price = Math.round(basePrice * airline.multiplier * (isDirect ? 1.2 : 0.85) * (0.9 + Math.random() * 0.3));
-
-        const depHour = 6 + (i * 1.5) % 18;
-        const duration = isDirect ? 120 + Math.random() * 30 : 180 + Math.random() * 60;
-
-        flights.push({
-            id: i + 1,
-            airline: airline.name,
-            flightNumber: `${airline.code}-${2000 + i}`,
-            from,
-            to,
-            departure: `${Math.floor(depHour).toString().padStart(2, '0')}:${Math.floor((depHour % 1) * 60).toString().padStart(2, '0')}`,
-            arrival: `${Math.floor((depHour + duration / 60) % 24).toString().padStart(2, '0')}:${Math.floor(((depHour + duration / 60) % 1) * 60).toString().padStart(2, '0')}`,
-            duration: `${Math.floor(duration / 60)}h ${Math.floor(duration % 60)}m`,
-            price,
-            stops: isDirect ? 0 : 1,
-            isDirect,
-            source: 'Estimated (Scraping blocked)',
-            logo: `https://images.kiwi.com/airlines/64/${airline.code}.png`
-        });
-    }
-
-    return flights.sort((a, b) => a.price - b.price);
-}
-
 function generateSmartHotels(destination) {
     console.log(`  ⚠️ Using smart fallback for hotels`);
 
@@ -351,12 +460,19 @@ function generateSmartHotels(destination) {
 async function searchFlights(from, to, date) {
     console.log(`\n✈️  FLIGHT SEARCH: ${from} → ${to}\n`);
 
-    // Try scraping first
-    let flights = await scrapeGoogleFlights(from, to, date);
+    let flights = await searchSerpApiFlights(from, to, date);
 
-    // Fallback to smart generator
     if (!flights || flights.length === 0) {
-        flights = generateSmartFlights(from, to, date);
+        flights = await scrapeGoogleFlights(from, to, date);
+    }
+
+    if (!flights || flights.length === 0) {
+        const details = process.env.SERPAPI_KEY
+            ? 'Live providers returned no parsable fares for this route/date.'
+            : 'Add SERPAPI_KEY to backend/.env for reliable Google Flights prices. Browser scraping is blocked or returned no fare text.';
+        const error = new Error(details);
+        error.status = 503;
+        throw error;
     }
 
     return flights;
@@ -380,6 +496,130 @@ async function searchHotels(destination, checkIn, checkOut) {
 // API ENDPOINTS
 // ============================================
 
+app.post('/api/auth/signup', async (req, res) => {
+    try {
+        const name = String(req.body.name || '').trim();
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const password = String(req.body.password || '');
+
+        if (!name || !email || password.length < 6) {
+            return res.status(400).json({ error: 'Name, valid email, and 6+ character password are required' });
+        }
+
+        const users = await readUsers();
+        if (users.some((user) => user.email === email)) {
+            return res.status(409).json({ error: 'An account with this email already exists' });
+        }
+
+        const user = {
+            id: crypto.randomUUID(),
+            name,
+            email,
+            passwordHash: hashPassword(password),
+            createdAt: new Date().toISOString()
+        };
+        users.push(user);
+        await writeUsers(users);
+
+        const token = signToken(user);
+        res.status(201).json({ success: true, token, user: { id: user.id, name, email } });
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ error: 'Could not create account' });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const password = String(req.body.password || '');
+        const users = await readUsers();
+        const user = users.find((item) => item.email === email);
+
+        if (!user || !verifyPassword(password, user.passwordHash)) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        const token = signToken(user);
+        res.json({ success: true, token, user: { id: user.id, name: user.name, email: user.email } });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'Could not sign in' });
+    }
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+    res.json({ success: true, user: { id: req.user.sub, name: req.user.name, email: req.user.email } });
+});
+
+app.post('/api/payments/create-order', requireAuth, async (req, res) => {
+    try {
+        const amount = Math.round(Number(req.body.amount || 0));
+        const currency = req.body.currency || 'INR';
+        if (!amount || amount < 1) {
+            return res.status(400).json({ error: 'Valid amount is required' });
+        }
+
+        if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+            return res.json({
+                success: true,
+                mode: 'mock',
+                keyId: 'rzp_test_configure_key',
+                order: {
+                    id: `order_dev_${crypto.randomBytes(8).toString('hex')}`,
+                    amount: amount * 100,
+                    currency,
+                    receipt: `dev_${Date.now()}`
+                }
+            });
+        }
+
+        const response = await axios.post('https://api.razorpay.com/v1/orders', {
+            amount: amount * 100,
+            currency,
+            receipt: `aevum_${Date.now()}`,
+            notes: {
+                userId: req.user.sub,
+                bookingType: req.body.bookingType || 'travel'
+            }
+        }, {
+            auth: {
+                username: RAZORPAY_KEY_ID,
+                password: RAZORPAY_KEY_SECRET
+            },
+            timeout: 20000
+        });
+
+        res.json({ success: true, mode: 'live', keyId: RAZORPAY_KEY_ID, order: response.data });
+    } catch (error) {
+        console.error('Create payment order error:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Could not create payment order' });
+    }
+});
+
+app.post('/api/payments/verify', requireAuth, (req, res) => {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, mode } = req.body;
+
+    if (mode === 'mock') {
+        return res.json({ success: true, bookingId: `AEV-${Date.now()}` });
+    }
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !RAZORPAY_KEY_SECRET) {
+        return res.status(400).json({ error: 'Payment verification details are missing' });
+    }
+
+    const expected = crypto
+        .createHmac('sha256', RAZORPAY_KEY_SECRET)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+    if (expected !== razorpay_signature) {
+        return res.status(400).json({ error: 'Payment verification failed' });
+    }
+
+    res.json({ success: true, bookingId: `AEV-${Date.now()}` });
+});
+
 app.get('/api/search/flights', async (req, res) => {
     try {
         const { from, to, date } = req.query;
@@ -398,7 +638,7 @@ app.get('/api/search/flights', async (req, res) => {
         });
     } catch (error) {
         console.error('Flight search error:', error);
-        res.status(500).json({ error: 'Search failed' });
+        res.status(error.status || 500).json({ error: error.message || 'Search failed' });
     }
 });
 
@@ -480,7 +720,7 @@ app.get('/api/search/budget', async (req, res) => {
 
     } catch (error) {
         console.error('Budget search error:', error);
-        res.status(500).json({ error: 'Search failed' });
+        res.status(error.status || 500).json({ error: error.message || 'Search failed' });
     }
 });
 
@@ -505,12 +745,13 @@ app.get('/api/search/packages', async (req, res) => {
 app.get('/health', (req, res) => {
     res.json({
         status: 'Running',
-        scraping: 'Direct web scraping enabled (No API keys needed)',
+        scraping: 'Live flight prices require SERPAPI_KEY or a successful browser scrape; fake flight prices are disabled',
         features: [
-            '✅ Google Flights scraping',
+            '✅ Google Flights via SerpApi when configured',
             '✅ Booking.com scraping',
             '✅ Anti-detection (Stealth mode)',
-            '✅ Smart fallback if blocked'
+            '✅ Razorpay order creation and verification',
+            '✅ Login-protected booking'
         ]
     });
 });

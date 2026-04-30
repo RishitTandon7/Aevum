@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { Plane, Calendar, Users, Search, ArrowRight, Clock, ShieldCheck, Zap, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../AuthContext';
+import { startCheckout } from '../payments';
 
 const Flights = () => {
     const [from, setFrom] = useState('Mumbai');
@@ -9,6 +12,9 @@ const Flights = () => {
     const [loading, setLoading] = useState(false);
     const [flights, setFlights] = useState([]);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const { user, isAuthenticated, authFetch } = useAuth();
+    const navigate = useNavigate();
 
     const searchFlights = async () => {
         if (!from || !to) {
@@ -18,6 +24,7 @@ const Flights = () => {
 
         setLoading(true);
         setError('');
+        setSuccess('');
         setFlights([]);
 
         try {
@@ -35,6 +42,28 @@ const Flights = () => {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const bookFlight = async (flight) => {
+        if (!isAuthenticated) {
+            navigate('/login');
+            return;
+        }
+
+        setError('');
+        setSuccess('');
+        try {
+            const result = await startCheckout({
+                authFetch,
+                user,
+                amount: flight.price * passengers,
+                description: `${flight.airline} ${flight.from} to ${flight.to}`,
+                bookingType: 'flight'
+            });
+            setSuccess(`Booking confirmed: ${result.bookingId}${result.mode === 'mock' ? ' (dev payment mode)' : ''}`);
+        } catch (err) {
+            setError(err.message);
         }
     };
 
@@ -132,6 +161,13 @@ const Flights = () => {
                     </div>
                 )}
 
+                {success && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/50 text-emerald-200 p-4 rounded-xl flex items-center gap-3 mb-8 animate-fade-in">
+                        <ShieldCheck className="w-5 h-5 shrink-0" />
+                        <p>{success}</p>
+                    </div>
+                )}
+
                 {/* Results Grid */}
                 {!loading && flights.length > 0 && (
                     <div className="space-y-6 animate-fade-in">
@@ -195,7 +231,7 @@ const Flights = () => {
                                             <p className="text-xs text-slate-400 mb-1">per person</p>
                                             <p className="text-3xl font-bold text-white">₹{flight.price.toLocaleString()}</p>
                                         </div>
-                                        <button className="w-full md:w-auto bg-white text-slate-900 px-6 py-2 rounded-lg font-bold hover:bg-indigo-50 transition-colors shadow-lg active:scale-95 flex items-center justify-center gap-2">
+                                        <button onClick={() => bookFlight(flight)} className="w-full md:w-auto bg-white text-slate-900 px-6 py-2 rounded-lg font-bold hover:bg-indigo-50 transition-colors shadow-lg active:scale-95 flex items-center justify-center gap-2">
                                             Book Now
                                             <ArrowRight className="w-4 h-4" />
                                         </button>
